@@ -303,14 +303,6 @@ Check specific spider logs:
 uv run scrapy crawl gazi -L INFO -o output.json
 ```
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/new-teknokent`)
-3. Add your changes
-4. Write tests for new functionality
-5. Submit a pull request
-
 ### Adding New Teknokents
 
 To add a new teknokent spider:
