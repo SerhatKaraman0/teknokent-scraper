@@ -4,9 +4,16 @@
 # https://docs.scrapy.org/en/latest/topics/items.html
 
 import scrapy
+from scrapy import Item, Field
 
 
-class TeknokentScraperItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    pass
+class CompanyDetailsItem(scrapy.Item):
+    company_name         = Field()
+    company_desc         = Field()
+    company_contact_mail = Field()
+    company_phone        = Field()
+    company_website      = Field()
+    company_location     = Field()
+    company_area         = Field()
+
+    

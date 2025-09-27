@@ -16,10 +16,10 @@ ADDONS = {}
 
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
-#USER_AGENT = "teknokent_scraper (+http://www.yourdomain.com)"
+# USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15"
 
 # Obey robots.txt rules
-ROBOTSTXT_OBEY = True
+ROBOTSTXT_OBEY = False
 
 # Concurrency and throttling settings
 #CONCURRENT_REQUESTS = 16
@@ -44,11 +44,11 @@ DOWNLOAD_DELAY = 1
 #    "teknokent_scraper.middlewares.TeknokentScraperSpiderMiddleware": 543,
 #}
 
-# Enable or disable downloader middlewares
-# See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
-#DOWNLOADER_MIDDLEWARES = {
-#    "teknokent_scraper.middlewares.TeknokentScraperDownloaderMiddleware": 543,
-#}
+
+DOWNLOADER_MIDDLEWARES = {
+    'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None,
+    'scrapy_user_agents.middlewares.RandomUserAgentMiddleware': 400,
+}
 
 # Enable or disable extensions
 # See https://docs.scrapy.org/en/latest/topics/extensions.html
@@ -58,9 +58,40 @@ DOWNLOAD_DELAY = 1
 
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
-#ITEM_PIPELINES = {
-#    "teknokent_scraper.pipelines.TeknokentScraperPipeline": 300,
-#}
+
+ITEM_PIPELINES = {
+    "teknokent_scraper.pipelines.TeknokentScraperPipeline": 300,
+}
+
+# Feed exports configuration - overwrite existing files
+FEEDS = {
+    '/Users/user/Desktop/Projects/teknokent-scraper/teknokent_scraper/teknokent_scraper/outputs/ANKARA_UNI/companies_%(name)s.json': {
+        'format': 'json',
+        'encoding': 'utf-8',
+        'store_empty': False,
+        'indent': 2,
+        'overwrite': True,
+    },
+    '/Users/user/Desktop/Projects/teknokent-scraper/teknokent_scraper/teknokent_scraper/outputs/ANKARA_UNI/companies_%(name)s.csv': {
+        'format': 'csv',
+        'encoding': 'utf-8',
+        'store_empty': False,
+        'overwrite': True,
+    },
+    '/Users/user/Desktop/Projects/teknokent-scraper/teknokent_scraper/teknokent_scraper/outputs/ITU_TEKNOKENT/companies_%(name)s.json': {
+        'format': 'json',
+        'encoding': 'utf-8',
+        'store_empty': False,
+        'indent': 2,
+        'overwrite': True,
+    },
+    '/Users/user/Desktop/Projects/teknokent-scraper/teknokent_scraper/teknokent_scraper/outputs/ITU_TEKNOKENT/companies_%(name)s.csv': {
+        'format': 'csv',
+        'encoding': 'utf-8',
+        'store_empty': False,
+        'overwrite': True,
+    }
+}
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
@@ -84,4 +115,29 @@ DOWNLOAD_DELAY = 1
 #HTTPCACHE_STORAGE = "scrapy.extensions.httpcache.FilesystemCacheStorage"
 
 # Set settings whose default value is deprecated to a future-proof value
+DOWNLOAD_HANDLERS = {
+    "http": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+    "https": "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler",
+}
+
+# settings.py
+TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
+
 FEED_EXPORT_ENCODING = "utf-8"
+
+# Playwright settings for AJAX content
+PLAYWRIGHT_BROWSER_TYPE = "chromium"
+PLAYWRIGHT_LAUNCH_OPTIONS = {
+    "headless": True,
+    "args": ["--no-sandbox", "--disable-dev-shm-usage"]
+}
+
+# Default request headers to mimic a real browser
+DEFAULT_REQUEST_HEADERS = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "DNT": "1",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+}
