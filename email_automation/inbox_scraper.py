@@ -17,12 +17,11 @@ The system gives you a password that you need to use to authenticate from python
 
 import sys
 import os
-
-
-from teknokent_scraper_logging.logger import logger
 import imaplib
 import email
 
+from custom_logging.logger import logger
+from .email_parser import LinkedInEmailParser
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -30,6 +29,7 @@ load_dotenv()
 # Get credentials from environment variables
 user = os.getenv("INBOX_SCRAPER_MAIL")
 password = os.getenv("INBOX_SCRAPER_PWD")
+parser = LinkedInEmailParser()
 
 # Validate that credentials are provided
 if not user or not password:
@@ -63,7 +63,9 @@ mail_id_list = data[0].split()  #IDs of all emails that we want to fetch
 
 msgs = [] # empty list to capture all messages
 #Iterate through messages and extract data into the msgs list
-logger.info("before mail_id_list")
+logger.info(f"Total mail id: {len(mail_id_list)}")
+
+
 for num in mail_id_list:
     typ, data = my_mail.fetch(num, '(RFC822)') #RFC822 returns whole message (BODY fetches just body)
     msgs.append(data)
@@ -89,9 +91,22 @@ for idx, msg in enumerate(msgs[::-1]):
         if type(response_part) is tuple:
             my_msg=email.message_from_bytes((response_part[1]))
             print("_________________________________________")
-            print ("subj:", my_msg['subject'])
-            print ("from:", my_msg['from'])
-            print ("body:")
+            
+            result = parser.parse_email(str(my_msg))
+            
+            jobs, len_jobs = parser.deduplicated_jobs(result)
+            recommended_jobs, len_recommended_jobs = parser.deduplicated_recommended_jobs(result, jobs)
+            # print ("subj:", my_msg['subject'])
+            # print ("from:", my_msg['from'])
+            # print ("body:", my_msg['body'])
+            print("--------------JOBS--------------")
+            print(f"TOTAL JOBS: {len_jobs}")
+            print(jobs)
+            
+            print("--------------RECOMMENDED JOBS--------------")
+            print(f"TOTAL RECOMMENDED JOBS: {len_recommended_jobs}") 
+            print(recommended_jobs)
+            
             print("_________________________________________")
             for part in my_msg.walk():  
                 #print(part.get_content_type())
