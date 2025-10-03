@@ -9,6 +9,7 @@ logs/
 *.cpython
 .DS_Store
 data/models
+research/
 
 # Ignore build and generated files
 firebase_auth/

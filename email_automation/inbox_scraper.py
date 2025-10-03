@@ -168,7 +168,7 @@ class InboxScraper():
                 raise Exception(f"Invalid key {key}. Accepted keys: {OPTIONS}")
             
             if value:
-                typ, data = self.my_mail.search(None, f'{key} "{value}"')
+                typ, data = self.my_mail.search(None, key, value)
             else:
                 typ, data = self.my_mail.search(None, key)
                 
@@ -179,7 +179,7 @@ class InboxScraper():
             raise Exception(f"Failed process due to {e}")
 
     def access_msgs_parallel(self, data):
-        """Sequential email fetching with NumPy optimization"""
+        """Sequential email fetching with NumPy optimization and SSL error handling"""
         try:
             logger.info("Started access_msgs_parallel function with NumPy optimization")
             
@@ -194,11 +194,12 @@ class InboxScraper():
             msgs = np.empty(len(mail_id_list), dtype=object)
             valid_count = 0
             failed_count = 0
+            ssl_errors = 0
             
             # Fetch emails sequentially using optimized for loop
-            logger.info("Fetching emails sequentially with NumPy arrays...")
+            logger.info("Fetching emails sequentially with NumPy arrays and SSL error handling...")
             
-            with tqdm(total=len(mail_id_list), desc="📧 Fetching emails (NumPy optimized)", unit="email") as pbar:
+            with tqdm(total=len(mail_id_list), desc="📧 Fetching emails (NumPy + SSL safe)", unit="email") as pbar:
                 for i in range(len(mail_id_list)):
                     email_id = mail_id_list[i]
                     try:
@@ -209,7 +210,25 @@ class InboxScraper():
                         else:
                             logger.warning(f"Failed to fetch mail id {email_id}: {typ}")
                             failed_count += 1
+                            
                     except Exception as e:
+                        error_str = str(e)
+                        if 'ssl' in error_str.lower() or 'eof' in error_str.lower():
+                            ssl_errors += 1
+                            # Try to reconnect on SSL errors
+                            if ssl_errors % 10 == 0:  # Reconnect every 10 SSL errors
+                                logger.warning(f"SSL reconnection attempt after {ssl_errors} errors...")
+                                try:
+                                    self.my_mail.close()
+                                    self.my_mail.logout()
+                                    self.my_mail = imaplib.IMAP4_SSL(self.imap_url)
+                                    if self.user and self.password:
+                                        self.my_mail.login(self.user, self.password)
+                                        self.my_mail.select('Inbox')
+                                        logger.info("SSL reconnection successful")
+                                except:
+                                    logger.error("SSL reconnection failed")
+                        
                         logger.error(f"Error fetching email {email_id}: {e}")
                         failed_count += 1
                     
@@ -218,7 +237,10 @@ class InboxScraper():
             # Trim array to actual size (remove empty slots)
             valid_msgs = msgs[:valid_count] if valid_count > 0 else np.array([], dtype=object)
             
-            logger.info(f"Successfully fetched {valid_count} emails, failed: {failed_count}")
+            # Save valid_msgs as backup in case processing fails
+            self.save_valid_msgs_backup(valid_msgs)
+            
+            logger.info(f"Successfully fetched {valid_count} emails, failed: {failed_count}, SSL errors: {ssl_errors}")
             return valid_msgs
             
         except Exception as e:
@@ -320,6 +342,40 @@ class InboxScraper():
         except Exception as e:
             logger.error(f"Failed to prepare dataframe: {e}")
             raise Exception(f"Failed process due to {e}")
+
+    def save_valid_msgs_backup(self, valid_msgs):
+        """Save valid_msgs as backup in case processing fails"""
+        try:
+            import pickle
+            backup_dir = os.path.join(os.getcwd(), "email_outputs", "backups")
+            os.makedirs(backup_dir, exist_ok=True)
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_file = os.path.join(backup_dir, f"valid_msgs_backup_{timestamp}.pkl")
+            
+            with open(backup_file, 'wb') as f:
+                pickle.dump(valid_msgs, f)
+            
+            logger.info(f"Backup saved: {backup_file} ({len(valid_msgs)} messages)")
+            return backup_file
+            
+        except Exception as e:
+            logger.error(f"Failed to save backup: {e}")
+            return None
+
+    def load_valid_msgs_backup(self, backup_file):
+        """Load valid_msgs from backup file"""
+        try:
+            import pickle
+            with open(backup_file, 'rb') as f:
+                valid_msgs = pickle.load(f)
+            
+            logger.info(f"Backup loaded: {backup_file} ({len(valid_msgs)} messages)")
+            return valid_msgs
+            
+        except Exception as e:
+            logger.error(f"Failed to load backup: {e}")
+            return None
 
     def save_to_csv(self, output_path="email_outputs", filename="SERHATKEDU_MAIL_OUTPUTS.csv"):
         """Save the processed emails to CSV file"""
