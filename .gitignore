@@ -102,7 +102,7 @@ __pycache__/
 # Go-specific
 bin/
 vendor/
-
+email_outputs/
 # Miscellaneous
 *.lock
 *.sqlite3

@@ -1,115 +1,418 @@
 # https://youtu.be/K21BSZPFIjQ
 """
-Extract selected mails from your gmail account
-
 1. Make sure you enable IMAP in your gmail settings
 (Log on to your Gmail account and go to Settings, See All Settings, and select
- Forwarding and POP/IMAP tab. In the "IMAP access" section, select Enable IMAP.)
+ the Forwarding and POP/IMAP tab and make sure IMAP is enabled.)
 
 2. If you have 2-factor authentication, gmail requires you to create an application
-specific password that you need to use. 
-Go to your Google account settings and click on 'Security'.
-Scroll down to App Passwords under 2 step verification.
-Select Mail under Select App. and Other under Select Device. (Give a name, e.g., python)
-The system gives you a password that you need to use to authenticate from python.
-
+specific password that you need to use.
 """
 
-import sys
-import os
 import imaplib
+import os
+import re
 import email
+from datetime import datetime
+from email.utils import parsedate_tz, mktime_tz
+from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+import multiprocessing
+from functools import partial
+import threading
+from queue import Queue
+import numpy as np
 
+import time
 from custom_logging.logger import logger
 from .email_parser import LinkedInEmailParser
 from dotenv import load_dotenv
+import pandas as pd
 
 load_dotenv()
 
-# Get credentials from environment variables
-user = os.getenv("INBOX_SCRAPER_MAIL")
-password = os.getenv("INBOX_SCRAPER_PWD")
-parser = LinkedInEmailParser()
+NUM_THREADS = 2  # Very conservative to avoid Gmail rate limits
+NUM_PROCESSES = os.cpu_count() or 1  
 
-# Validate that credentials are provided
-if not user or not password:
-    logger.error("Email credentials not found in environment variables")
-    logger.error("Please set INBOX_SCRAPER_MAIL and INBOX_SCRAPER_PWD in your .env file")
-    exit(1)
+logger.info(f"System detected: {NUM_PROCESSES} CPU cores")
+logger.info(f"Using {NUM_THREADS} threads for email fetching and {NUM_PROCESSES} processes for email processing")
 
-logger.info(f"Using email: {user}")
-
-imap_url = 'imap.gmail.com'
-
-logger.info("making imap connection")
-
-my_mail = imaplib.IMAP4_SSL(imap_url)
-
-logger.info("initiate login")
-
-my_mail.login(user, password)
-logger.info("login is passed")
-
-# Select the Inbox to fetch messages
-my_mail.select('Inbox')
-
-#Define Key and Value for email search
-#For other keys (criteria): https://gist.github.com/martinrusev/6121028#file-imap-search
-key = 'FROM'
-value = 'jobs-noreply@linkedin.com>'
-_, data = my_mail.search(None, key, value)  #Search for emails with specific key and value
-
-mail_id_list = data[0].split()  #IDs of all emails that we want to fetch 
-
-msgs = [] # empty list to capture all messages
-#Iterate through messages and extract data into the msgs list
-logger.info(f"Total mail id: {len(mail_id_list)}")
-
-
-for num in mail_id_list:
-    typ, data = my_mail.fetch(num, '(RFC822)') #RFC822 returns whole message (BODY fetches just body)
-    msgs.append(data)
-
-logger.info("messages are appended")
-#Now we have all messages, but with a lot of details
-#Let us extract the right text and print on the screen
-
-#In a multipart e-mail, email.message.Message.get_payload() returns a 
-# list with one item for each part. The easiest way is to walk the message 
-# and get the payload on each part:
-# https://stackoverflow.com/questions/1463074/how-can-i-get-an-email-messages-text-content-using-python
-
-# NOTE that a Message object consists of headers and payloads.
-
-logger.info("reading messages")
-
-for idx, msg in enumerate(msgs[::-1]):
-    logger.info(f"Reading the {idx}th message")
-    if idx == 5:
-        break
-    for response_part in msg:
-        if type(response_part) is tuple:
-            my_msg=email.message_from_bytes((response_part[1]))
-            print("_________________________________________")
+def fetch_single_email(args):
+    """Worker function to fetch a single email - with shared connection"""
+    shared_connection, email_id = args
+    
+    try:
+        typ, msg_data = shared_connection.fetch(email_id, '(RFC822)')
+        if typ == 'OK' and msg_data and msg_data[0]:
+            return email_id, msg_data
+        else:
+            logger.warning(f"Failed to fetch mail id {email_id}: {typ}")
+            return email_id, None
             
-            result = parser.parse_email(str(my_msg))
+    except Exception as e:
+        logger.error(f"Error fetching email {email_id}: {e}")
+        return email_id, None
+
+def process_single_email(msg_data):
+    """Worker function to process a single email - CPU intensive"""
+    try:
+        if not msg_data:
+            return None
             
-            jobs, len_jobs = parser.deduplicated_jobs(result)
-            recommended_jobs, len_recommended_jobs = parser.deduplicated_recommended_jobs(result, jobs)
-            # print ("subj:", my_msg['subject'])
-            # print ("from:", my_msg['from'])
-            # print ("body:", my_msg['body'])
-            print("--------------JOBS--------------")
-            print(f"TOTAL JOBS: {len_jobs}")
-            print(jobs)
+        for response_part in msg_data:
+            if isinstance(response_part, tuple):
+                my_msg = email.message_from_bytes(response_part[1])
+                
+                mail = {}
+                mail["EMAIL_SENDER"] = my_msg["from"]
+                mail["EMAIL_SUBJECT"] = my_msg["subject"]
+                
+                # Collect all payloads and their content types
+                bodies = []
+                content_types = []
+                for part in my_msg.walk():
+                    if part.get_content_type() is not None and part.get_content_maintype() != 'multipart':
+                        payload = part.get_payload(decode=True)
+                        if isinstance(payload, bytes):
+                            body = payload.decode('utf-8', errors='ignore')
+                        else:
+                            body = str(payload)
+                        bodies.append(body)
+                        content_types.append(part.get_content_type())
+                mail["EMAIL_BODY"] = bodies
+                mail["EMAIL_CONTENT_TYPE"] = content_types
+                
+                mail["EMAIL_PAYLOAD"] = str(my_msg)
+                return mail
+                
+        return None
+    except Exception as e:
+        logger.error(f"Error processing email: {e}")
+        return None
+
+class InboxScraper():
+    def __init__(self, max_threads=None, max_processes=None):
+        self.user = os.getenv("INBOX_SCRAPER_MAIL")
+        self.password = os.getenv("INBOX_SCRAPER_PWD")
+        if not self.user or not self.password:
+            raise ValueError("INBOX_SCRAPER_MAIL and INBOX_SCRAPER_PWD environment variables must be set and non-empty.")
+        
+        # Initialize with NumPy arrays for better performance
+        self.email_data = {
+            'senders': np.array([], dtype=object),
+            'subjects': np.array([], dtype=object),
+            'bodies': np.array([], dtype=object),
+            'payloads': np.array([], dtype=object),
+            'content_types': np.array([], dtype=object),
+            'dates': np.array([], dtype=object),
+            'timestamps': np.array([], dtype=object)
+        }
+        
+        self.df = pd.DataFrame(columns=["EMAIL_SENDER", "EMAIL_SUBJECT", "EMAIL_BODY", "EMAIL_PAYLOAD", "EMAIL_CONTENT_TYPE", "EMAIL_DATE", "EMAIL_TIMESTAMP"])
+        self.imap_url = "imap.gmail.com"
+        self.my_mail = imaplib.IMAP4_SSL(self.imap_url)
+        
+        # Set threading/processing limits
+        self.max_threads = max_threads or NUM_THREADS
+        self.max_processes = max_processes or NUM_PROCESSES
+        
+        logger.info(f"InboxScraper initialized with {self.max_threads} threads and {self.max_processes} processes")
+        logger.info("Using NumPy arrays for optimized data processing")
+    
+    def initiate_mail_login(self):
+        try:
+            logger.info("Started initial_mail_login function")
+            if not self.user or not self.password:
+                raise ValueError("User and password must be set")
+            self.my_mail.login(self.user, self.password)
+            self.my_mail.select('Inbox')
+            logger.info("Successful initial_mail_login function")
+        except Exception as e:
+            raise Exception(f"Failed process due to {e}")
+        
+    def access_mail(self, key: str, value = None):
+        try:
+            OPTIONS = [
+                "ALL",
+                "ANSWERED",
+                "DELETED",
+                "DRAFT",
+                "FLAGGED",
+                "FROM",
+                "KEYWORD",
+                "LARGER",
+                "NEW",
+                "NOT",
+                "OLD",
+                "ON",
+                "RECENT",
+                "SEEN",
+                "SENTBEFORE",
+                "SENTON",
+                "SENTSINCE",
+                "SINCE",
+                "SMALLER",
+                "SUBJECT",
+                "TEXT",
+                "TO",
+                "UID",
+                "UNANSWERED",
+                "UNDELETED",
+                "UNDRAFT",
+                "UNFLAGGED",
+                "UNKEYWORD",
+                "UNSEEN"
+            ]
+            logger.info("access_mail function started")
             
-            print("--------------RECOMMENDED JOBS--------------")
-            print(f"TOTAL RECOMMENDED JOBS: {len_recommended_jobs}") 
-            print(recommended_jobs)
+            if key not in OPTIONS:
+                raise Exception(f"Invalid key {key}. Accepted keys: {OPTIONS}")
             
-            print("_________________________________________")
-            for part in my_msg.walk():  
-                #print(part.get_content_type())
-                if part.get_content_type() == 'text/plain':
-                    print (part.get_payload())
+            if value:
+                typ, data = self.my_mail.search(None, f'{key} "{value}"')
+            else:
+                typ, data = self.my_mail.search(None, key)
+                
+            logger.info(f"Search completed with {len(data[0].split())} results")
             
+            return data
+        except Exception as e:
+            raise Exception(f"Failed process due to {e}")
+
+    def access_msgs_parallel(self, data):
+        """Sequential email fetching with NumPy optimization"""
+        try:
+            logger.info("Started access_msgs_parallel function with NumPy optimization")
+            
+            # Convert to NumPy array for vectorized operations
+            mail_id_list = np.array(data[0].split(), dtype=object)
+            logger.info(f"mail_id_list extracted - found {len(mail_id_list)} emails")
+            
+            if len(mail_id_list) == 0:
+                return np.array([], dtype=object)
+            
+            # Pre-allocate NumPy array for messages (much faster than list.append)
+            msgs = np.empty(len(mail_id_list), dtype=object)
+            valid_count = 0
+            failed_count = 0
+            
+            # Fetch emails sequentially using optimized for loop
+            logger.info("Fetching emails sequentially with NumPy arrays...")
+            
+            with tqdm(total=len(mail_id_list), desc="📧 Fetching emails (NumPy optimized)", unit="email") as pbar:
+                for i in range(len(mail_id_list)):
+                    email_id = mail_id_list[i]
+                    try:
+                        typ, msg_data = self.my_mail.fetch(email_id, '(RFC822)')
+                        if typ == 'OK' and msg_data and msg_data[0]:
+                            msgs[valid_count] = msg_data
+                            valid_count += 1
+                        else:
+                            logger.warning(f"Failed to fetch mail id {email_id}: {typ}")
+                            failed_count += 1
+                    except Exception as e:
+                        logger.error(f"Error fetching email {email_id}: {e}")
+                        failed_count += 1
+                    
+                    pbar.update(1)
+            
+            # Trim array to actual size (remove empty slots)
+            valid_msgs = msgs[:valid_count] if valid_count > 0 else np.array([], dtype=object)
+            
+            logger.info(f"Successfully fetched {valid_count} emails, failed: {failed_count}")
+            return valid_msgs
+            
+        except Exception as e:
+            raise Exception(f"Failed process due to {e}")
+    
+    def prepare_dataframe_parallel(self, msgs):
+        """NumPy-optimized dataframe preparation with vectorized operations"""
+        try:
+            logger.info("Started prepare_dataframe_parallel function with NumPy optimization")
+            
+            if len(msgs) == 0:
+                logger.warning("No messages to process")
+                return self.df
+            
+            # Pre-allocate NumPy arrays for email data (much faster than lists)
+            num_msgs = len(msgs)
+            senders = np.empty(num_msgs, dtype=object)
+            subjects = np.empty(num_msgs, dtype=object)
+            bodies = np.empty(num_msgs, dtype=object)
+            payloads = np.empty(num_msgs, dtype=object)
+            content_types = np.empty(num_msgs, dtype=object)
+            dates = np.empty(num_msgs, dtype=object)
+            timestamps = np.empty(num_msgs, dtype=object)
+            
+            valid_count = 0
+            
+            logger.info("Processing emails with NumPy vectorized operations...")
+            
+            with tqdm(total=num_msgs, desc="⚡ Processing emails (NumPy vectorized)", unit="email") as pbar:
+                for i in range(num_msgs):
+                    msg_data = msgs[i]
+                    try:
+                        if msg_data is not None:
+                            for response_part in msg_data:
+                                if isinstance(response_part, tuple):
+                                    my_msg = email.message_from_bytes(response_part[1])
+                                    
+                                    # Direct array assignment (faster than dict operations)
+                                    senders[valid_count] = my_msg["from"]
+                                    subjects[valid_count] = my_msg["subject"]
+                                    payloads[valid_count] = str(my_msg)
+                                    
+                                    # Extract email date and timestamp
+                                    date_tuple = parsedate_tz(my_msg.get("Date", ""))
+                                    if date_tuple:
+                                        # Convert to timestamp
+                                        timestamp = mktime_tz(date_tuple)
+                                        # Convert to readable datetime
+                                        email_datetime = datetime.fromtimestamp(timestamp)
+                                        dates[valid_count] = email_datetime.strftime("%Y-%m-%d %H:%M:%S")
+                                        timestamps[valid_count] = timestamp
+                                    else:
+                                        dates[valid_count] = "Unknown"
+                                        timestamps[valid_count] = 0
+                                    
+                                    body_found = False
+                                    for part in my_msg.walk():
+                                        payload = part.get_payload(decode=True)
+                                        if isinstance(payload, bytes):
+                                            bodies[valid_count] = payload.decode('utf-8', errors='ignore')
+                                        else:
+                                            bodies[valid_count] = str(payload)
+                                        content_types[valid_count] = part.get_content_type()
+                                        body_found = True
+                                    
+                                    if not body_found:
+                                        bodies[valid_count] = ""
+                                        content_types[valid_count] = "unknown"
+                                    
+                                    valid_count += 1
+                                    break
+                                    
+                    except Exception as e:
+                        logger.error(f"Error processing email {i}: {e}")
+                    
+                    pbar.update(1)
+            
+            if valid_count > 0:
+                logger.info(f"Creating DataFrame from {valid_count} processed emails with NumPy")
+                
+                # Create DataFrame from NumPy arrays (much faster than from list of dicts)
+                # Create DataFrame from NumPy arrays (much faster than from list of dicts)
+                email_dict = {
+                    "EMAIL_SENDER": senders[:valid_count],
+                    "EMAIL_SUBJECT": subjects[:valid_count],
+                    "EMAIL_BODY": bodies[:valid_count],
+                    "EMAIL_PAYLOAD": payloads[:valid_count],
+                    "EMAIL_CONTENT_TYPE": content_types[:valid_count],
+                    "EMAIL_DATE": dates[:valid_count],
+                    "EMAIL_TIMESTAMP": timestamps[:valid_count]
+                }
+                self.df = pd.DataFrame(email_dict)
+                logger.info(f"NumPy-optimized DataFrame created with shape: {self.df.shape}")
+            else:
+                logger.warning("No emails were successfully processed")
+            
+            return self.df
+            
+        except Exception as e:
+            logger.error(f"Failed to prepare dataframe: {e}")
+            raise Exception(f"Failed process due to {e}")
+
+    def save_to_csv(self, output_path="email_outputs", filename="SERHATKEDU_MAIL_OUTPUTS.csv"):
+        """Save the processed emails to CSV file"""
+        try:
+            logger.info("Saving to csv started.")
+            
+            full_output_path = os.path.join(os.getcwd(), output_path)
+            os.makedirs(full_output_path, exist_ok=True)
+            
+            file_path = os.path.join(full_output_path, filename)
+            self.df.to_csv(file_path, index=False)
+            
+            logger.info(f"File saved at {file_path}")
+            logger.info(f"Saved {len(self.df)} emails to CSV")
+            
+            return file_path
+        except Exception as e:
+            logger.error(f"Failed to save CSV: {e}")
+            raise Exception(f"Failed to save CSV due to {e}")
+
+    def get_performance_stats(self):
+        """Get performance statistics for the current dataset"""
+        try:
+            stats = {
+                'total_emails': len(self.df),
+                'memory_usage_mb': self.df.memory_usage(deep=True).sum() / 1024**2,
+                'data_types': dict(self.df.dtypes),
+                'null_counts': dict(self.df.isnull().sum())
+            }
+            
+            logger.info(f"Performance Stats - Emails: {stats['total_emails']}, Memory: {stats['memory_usage_mb']:.2f}MB")
+            return stats
+        except Exception as e:
+            logger.error(f"Failed to get performance stats: {e}")
+            return {}
+
+    def get_emails_by_date_range(self, start_date, end_date):
+        """Filter emails by date range"""
+        try:
+            if 'EMAIL_DATE' not in self.df.columns:
+                logger.warning("Email dates not available")
+                return pd.DataFrame()
+            
+            # Convert date strings to datetime for filtering
+            self.df['EMAIL_DATE_PARSED'] = pd.to_datetime(self.df['EMAIL_DATE'], errors='coerce')
+            
+            # Filter by date range
+            mask = (self.df['EMAIL_DATE_PARSED'] >= start_date) & (self.df['EMAIL_DATE_PARSED'] <= end_date)
+            filtered_df = self.df.loc[mask]
+            
+            logger.info(f"Found {len(filtered_df)} emails between {start_date} and {end_date}")
+            return filtered_df
+            
+        except Exception as e:
+            logger.error(f"Failed to filter by date range: {e}")
+            return pd.DataFrame()
+
+    def get_email_stats_by_date(self):
+        """Get email statistics grouped by date"""
+        try:
+            if 'EMAIL_DATE' not in self.df.columns:
+                logger.warning("Email dates not available")
+                return {}
+            
+            # Convert to datetime and extract date only
+            self.df['EMAIL_DATE_PARSED'] = pd.to_datetime(self.df['EMAIL_DATE'], errors='coerce')
+            self.df['EMAIL_DATE_ONLY'] = self.df['EMAIL_DATE_PARSED'].dt.date
+            
+            # Group by date and count
+            date_stats = self.df.groupby('EMAIL_DATE_ONLY').size().sort_index(ascending=False)
+            
+            stats = {
+                'emails_per_day': date_stats.to_dict(),
+                'busiest_day': date_stats.idxmax() if not date_stats.empty else None,
+                'max_emails_per_day': date_stats.max() if not date_stats.empty else 0,
+                'date_range': {
+                    'earliest': date_stats.index.min() if not date_stats.empty else None,
+                    'latest': date_stats.index.max() if not date_stats.empty else None
+                }
+            }
+            
+            logger.info(f"Email date stats: {stats['max_emails_per_day']} max emails on {stats['busiest_day']}")
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Failed to get email stats by date: {e}")
+            return {}
+
+if __name__ == "__main__":
+    scraper = InboxScraper()
+    scraper.initiate_mail_login()
+    data = scraper.access_mail("ALL")
+    msgs = scraper.access_msgs_parallel(data)
+    df = scraper.prepare_dataframe_parallel(msgs)
+    file_path = scraper.save_to_csv()
+    print(f"Processing complete. Saved to: {file_path}")
