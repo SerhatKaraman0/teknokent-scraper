@@ -91,10 +91,10 @@ def process_single_email(msg_data):
 
 class InboxScraper():
     def __init__(self, max_threads=None, max_processes=None):
-        self.user = os.getenv("INBOX_SCRAPER_MAIL")
-        self.password = os.getenv("INBOX_SCRAPER_PWD")
+        self.user = os.getenv("WORKMAIL_INBOX_SCRAPER_MAIL")
+        self.password = os.getenv("WORKMAIL_INBOX_SCRAPER_PWD")
         if not self.user or not self.password:
-            raise ValueError("INBOX_SCRAPER_MAIL and INBOX_SCRAPER_PWD environment variables must be set and non-empty.")
+            raise ValueError("WORKMAIL_INBOX_SCRAPER_MAIL and WORKMAIL_INBOX_SCRAPER_PWD environment variables must be set and non-empty.")
         
         # Initialize with NumPy arrays for better performance
         self.email_data = {
@@ -377,7 +377,7 @@ class InboxScraper():
             logger.error(f"Failed to load backup: {e}")
             return None
 
-    def save_to_csv(self, output_path="email_outputs", filename="SERHATKEDU_MAIL_OUTPUTS.csv"):
+    def save_to_csv(self, output_path="/Users/user/Desktop/Projects/teknokent_scraper/email_automation/email_outputs", filename="SERHATKARAMANWORKMAIL_MAIL_OUTPUTS.csv"):
         """Save the processed emails to CSV file"""
         try:
             logger.info("Saving to csv started.")

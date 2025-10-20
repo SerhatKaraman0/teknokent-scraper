@@ -1,0 +1,63 @@
+[
+  {
+    "description": "Başarsoft is the leading and pioneering company providing totally tailored solutions in GIS. It was founded in 1997 by a group of passionate group of engineers, professional in GIS in Turkey.\n\nBaşarsoft provide GIS solutions in variaty of fields, and focused on Utility Network GIS and Navigation Data Production sector. Main applications in GIS include data management and integration into SCADA, billing, maintenance, SAP, field and Sales Force Management, CRM systems. Başarsoft has been awarded to become regional distributor and solution center for Pitney Bowes, MapInfo Pro GIS solutions, for EMEA region. Başarsoft has developed the largest Infrastructure Network GIS systems for Turkey, including Telecom Wireline & Cable TV Network (basarsoft.com.tr/telcobis), Electricity/Power Grid (basarsoft.com.tr/edabis), Water/Sewage/Stormwater Network (basarsoft.com.tr/sudabis), Natural Gas Network (basarsoft.com.tr/doabis).\n\nBaşarsoft is also the leading navigation data and solution provider in Turkey and Northern Cyprus. Başarsoft has been investing in R&D. Special Utility & Navigation Solution for blinds can be given as an example of the projects R&D has developed. Mapbis Inc. is Başarsoft's sister company in USA, opened in 2017. Başarsoft Uganda office registered in Kampala, in 2021.",
+    "image": "https://media.licdn.com/dms/image/v2/D4D0BAQHgPzSd1Fujqg/company-logo_200_200/company-logo_200_200/0/1704174814379/basarsoft_logo?e=1762387200&v=beta&t=w1Qe3XImK_3x36UkHq3_K4GTshGZPtzqdGNswPVtSJw",
+    "name": null,
+    "num_employees": null,
+    "metadata": {
+      "website": "https://www.basarsoft.com.tr",
+      "phone": "+903124737080 Phone number is +903124737080",
+      "verified_page": "November 1, 2024",
+      "industry": "Software Development",
+      "company_size": "201-500 employees\n338 associated members LinkedIn members who’ve listed Başarsoft as their current workplace on their profile.",
+      "headquarters": "Çankaya, Ankara",
+      "founded": "1997",
+      "specialties": "GIS, MapInfo, Spatial Decision Support Systems, Navigation Solutions, Google Earth Enterprise, Electricty Grid GIS, Telecom GIS, Water Sewer GIS, Natural Gas GIS, GIS System Integration, and Location Based Sevices"
+    },
+    "company_name": "basarsoft"
+  },
+  {
+    "description": null,
+    "image": "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+    "name": null,
+    "num_employees": null,
+    "metadata": {
+      "industry": "Software Development",
+      "company_size": "2-10 employees",
+      "headquarters": "Sint-Oedenrode, North Brabant",
+      "founded": "2016"
+    },
+    "company_name": "roboflow"
+  },
+  {
+    "description": "Udemy was founded in 2010 with a mission to improve lives through learning by democratizing access to skills development. Today, we've grown into one of the world's largest AI Powered Skills Acceleration Platform, with nearly 85 million learners worldwide and over 1.1 billion course enrollments.\n\nOur global skills ecosystem connects learners with 85,000 expert instructors across more than 250,000 courses in 77 languages. From programming and data science to business strategy and creative skills, we offer hands-on learning experiences designed for immediate real-world application.\n\nUdemy serves both individual learners advancing their careers and organizations building future-ready teams. Our AI-enhanced platform personalizes learning journeys, helping professionals master in-demand skills in today's rapidly evolving, skills-first economy. With over 17,000 business customers and growing demand for AI literacy across industries, we're transforming how the world learns and works.\n\nWhether you're an individual looking to upskill, an instructor ready to share expertise with millions, or an enterprise building workforce agility, Udemy is where skills happen.",
+    "image": "https://media.licdn.com/dms/image/v2/D560BAQEf_NHzN2yVQg/company-logo_200_200/company-logo_200_200/0/1723593046388/udemy_logo?e=1762387200&v=beta&t=sTNwDW80-ffsihgPLIyUZmTWQl2AOkIX7sGuatBZYcg",
+    "name": null,
+    "num_employees": null,
+    "metadata": {
+      "website": "http://www.udemy.com",
+      "verified_page": "March 1, 2023",
+      "industry": "E-Learning Providers",
+      "company_size": "1,001-5,000 employees\n9,009 associated members LinkedIn members who’ve listed Udemy or its subsidiary Udemy Business Leadership Academy as their current workplace on their profile.",
+      "headquarters": "San Francisco, CA",
+      "founded": "2010",
+      "specialties": "e-learning, education, skills, technology, internet, marketplace, online learning, upskilling, reskilling, power skills, business, and corporate learning"
+    },
+    "company_name": "udemy"
+  },
+  {
+    "description": "Every company has a mission. What's ours? To empower every person and every organization to achieve more. We believe technology can and should be a force for good and that meaningful innovation contributes to a brighter world in the future and today. Our culture doesn’t just encourage curiosity; it embraces it. Each day we make progress together by showing up as our authentic selves. We show up with a learn-it-all mentality. We show up cheering on others, knowing their success doesn't diminish our own. We show up every day open to learning our own biases, changing our behavior, and inviting in differences. Because impact matters. \n\nMicrosoft operates in 190 countries and is made up of approximately 228,000 passionate employees worldwide.",
+    "image": "https://media.licdn.com/dms/image/v2/D560BAQH32RJQCl3dDQ/company-logo_200_200/B56ZYQ0mrGGoAM-/0/1744038948046/microsoft_logo?e=1762387200&v=beta&t=ky9MHqnDz5eZhINRX6Bw3MFecasJyK59DKM4SmFjTKM",
+    "name": null,
+    "num_employees": null,
+    "metadata": {
+      "website": "https://news.microsoft.com/",
+      "verified_page": "August 16, 2023",
+      "industry": "Software Development",
+      "company_size": "10,001+ employees\n227,183 associated members LinkedIn members who’ve listed Microsoft or its subsidiaries (GitHub, Parature, and 21 other companies) as their current workplace on their profile.",
+      "headquarters": "Redmond, Washington",
+      "specialties": "Business Software, Developer Tools, Home & Educational Software, Tablets, Search, Advertising, Servers, Windows Operating System, Windows Applications & Platforms, Smartphones, Cloud Computing, Quantum Computing, Future of Work, Productivity, AI, Artificial Intelligence, Machine Learning, Laptops, Mixed Reality, Virtual Reality, Gaming, Developers, and IT Professional"
+    },
+    "company_name": "microsoft"
+  }
+]
